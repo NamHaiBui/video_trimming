@@ -3,9 +3,10 @@ import json
 import sys
 
 
-from tools.generate_video_artifacts import generate_video_chunks_and_quotes
+from tools.components.video.video_summary_cutting_script import process_video_summary
+from tools.generate_video_artifacts import generate_video_artifacts
 from utils.logging_config import setup_custom_logger
-# from utils.db_operations import get_all_chunks, process_audio_chunks, update_summarization_status
+from utils.db_operations import get_all_chunks, process_audio_chunks
 
 logging = setup_custom_logger(__name__)
 # model = "r1-1776"
@@ -52,7 +53,7 @@ def main():
     try:
         # generate audio chunks
         logging.info(f"Generating audio chunks for ID: {meta_data_idx}")
-        filtered_chunks, quotes, episode_metadata = generate_video_chunks_and_quotes(meta_data_idx, force_audio_chunking, force_audio_quote_extraction)       
+        chunks_result, quotes_result, summary_result, episode_metadata = generate_video_artifacts(meta_data_idx, force_audio_chunking, force_audio_quote_extraction, force_summarization)       
 
     except Exception as e:
         print(f"Error generating audio chunks: {e}")
@@ -61,55 +62,26 @@ def main():
             'body': f"Error: {str(e)}"
         }
     
-    if not filtered_chunks:
+    if not chunks_result:
         logging.error("No audio chunks found for the episode.")
         return {
             'statusCode': 500,
             'body': f"Error: No audio chunks found for the episode."
         }
-
-    if episode_metadata['summarization_status'] == "COMPLETED" and not force_summarization:
-        logging.info(f"Summarization already completed for ID: {meta_data_idx}, skipping processing...")
+    if not quotes_result:
+        logging.error("No quotes found for the episode.")
         return {
-            'statusCode': 200,
-            'body': "Audio chunks already summarized."
+            'statusCode': 500,
+            'body': f"Error: No quotes found for the episode."
         }
-
-    # try:
-    #     logging.info("Processing audio chunks for the final summary")
-    #     if final_summary_chunks:
-    #         # Process audio chunks
-    #         merged_audio_path, summary_metadata = process_audio_chunks(
-    #             final_summary_chunks, 
-    #             AUDIO_CHUNK_BUCKET, 
-    #             SUMMARY_BUCKET
-    #         )
-
-    #         # generate timestamps for summary
-    #         summary_transcript_file_name = generate_summary_timestamps(
-    #             final_summary_chunks,
-    #             episode_metadata['podcast_title'],
-    #             episode_metadata['episode_title'],
-    #         )
-    #         summary_metadata["summary_transcript_file_name"] = summary_transcript_file_name
-
-    #         if merged_audio_path:
-    #             # Update status in dynamodb
-    #             update_summarization_status(episode_metadata["podcast_title"], episode_metadata["episode_title"], "COMPLETED", summary_metadata)
-
-    #         return {
-    #             'statusCode': 200,
-    #             'body': f"Summary audio path: {merged_audio_path}"
-    #         }
-    
-    # except Exception as e:
-    #     logging.error(f"Error processing audio chunks: {e}")
-    #     return {
-    #         'statusCode': 500,
-    #         'body': f"Error: {str(e)}"
-    #     }
+    if not summary_result:
+        logging.error("No summary result found for the episode.")
+        return {
+            'statusCode': 500,
+            'body': f"Error: No summary result found for the episode."
+        }
     logging.info("Task complete.")
 
 if __name__ == "__main__":
     main()
-    # python main.py '{"id": "84e9ae60-481d-428a-94d0-97456c8bb59e", "force_summarization": true, "force_audio_chunking": true, "force_audio_quote_extraction": true}'
+    

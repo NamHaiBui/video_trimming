@@ -3,6 +3,7 @@ from typing import List, Dict, Any, Optional
 import json
 import csv
 from pathlib import Path
+from ..utils.dynamo_att_to_types import dynamodb_attribute_to_python_type
 
 @dataclass
 class WordTimestamp:
@@ -15,14 +16,16 @@ class WordTimestamp:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'WordTimestamp':
         """Create WordTimestamp from dictionary data"""
-        if 'M' in data:
-            m_data = data['M']
-            return cls(
-                absolute_start_time=m_data.get('absolute_start_time', {}).get('S', ''),
-                duration=m_data.get('duration', {}).get('S', ''),
-                absolute_end_time=m_data.get('absolute_end_time', {}).get('S', ''),
-                word=m_data.get('word', {}).get('S', '')
-            )
+        if isinstance(data, dict):
+            # Use utility function to convert DynamoDB attributes
+            converted_data = dynamodb_attribute_to_python_type(data)
+            if isinstance(converted_data, dict):
+                return cls(
+                    absolute_start_time=str(converted_data.get('absolute_start_time', '')),
+                    duration=str(converted_data.get('duration', '')),
+                    absolute_end_time=str(converted_data.get('absolute_end_time', '')),
+                    word=str(converted_data.get('word', ''))
+                )
         return cls('', '', '', '')
     
     def to_dict(self) -> Dict[str, Any]:
@@ -45,10 +48,15 @@ class TimeStamps:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'TimeStamps':
         """Create TimeStamps from dictionary data"""
-        return cls(
-            start=data.get('start', {}).get('S', ''),
-            end=data.get('end', {}).get('S', '')
-        )
+        if isinstance(data, dict):
+            # Use utility function to convert DynamoDB attributes
+            converted_data = dynamodb_attribute_to_python_type(data)
+            if isinstance(converted_data, dict):
+                return cls(
+                    start=str(converted_data.get('start', '')),
+                    end=str(converted_data.get('end', ''))
+                )
+        return cls('', '')
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert TimeStamps to dictionary format"""
@@ -58,7 +66,7 @@ class TimeStamps:
         }
 
 @dataclass
-class ChunkModel:
+class Chunk:
     """Model representing a podcast chunk with all associated metadata"""
     podcast_title: str
     episode_chunk_id: str  # episode_title#chunk_no
@@ -94,13 +102,14 @@ class ChunkModel:
             return 0.0
     
     @classmethod
-    def from_csv_row(cls, row: Dict[str, str]) -> 'ChunkModel':
+    def from_csv_row(cls, row: Dict[str, str]) -> 'Chunk':
         """Create ChunkModel from CSV row"""
         # Parse sentiment
         sentiment = []
         try:
             sentiment_data = json.loads(row.get('sentiment', '[]'))
-            sentiment = [item.get('S', '') for item in sentiment_data if 'S' in item]
+            if isinstance(sentiment_data, list):
+                sentiment = [str(dynamodb_attribute_to_python_type(item)) for item in sentiment_data if dynamodb_attribute_to_python_type(item)]
         except (json.JSONDecodeError, TypeError):
             sentiment = []
         
@@ -108,7 +117,8 @@ class ChunkModel:
         speakers = []
         try:
             speakers_data = json.loads(row.get('speakers', '[]'))
-            speakers = [item.get('S', '') for item in speakers_data if 'S' in item]
+            if isinstance(speakers_data, list):
+                speakers = [str(dynamodb_attribute_to_python_type(item)) for item in speakers_data if dynamodb_attribute_to_python_type(item)]
         except (json.JSONDecodeError, TypeError):
             speakers = []
         
@@ -116,7 +126,8 @@ class ChunkModel:
         topics = []
         try:
             topics_data = json.loads(row.get('topics', '[]'))
-            topics = [item.get('S', '') for item in topics_data if 'S' in item]
+            if isinstance(topics_data, list):
+                topics = [str(dynamodb_attribute_to_python_type(item)) for item in topics_data if dynamodb_attribute_to_python_type(item)]
         except (json.JSONDecodeError, TypeError):
             topics = []
         
@@ -212,7 +223,7 @@ class ChunkModel:
         }
     
     @classmethod
-    def load_from_csv(cls, csv_path: str) -> List['ChunkModel']:
+    def load_from_csv(cls, csv_path: str) -> List['Chunk']:
         """Load chunks from CSV file"""
         chunks = []
         csv_file = Path(csv_path)
@@ -233,7 +244,7 @@ class ChunkModel:
         return chunks
     
     @classmethod
-    def save_to_csv(cls, chunks: List['ChunkModel'], csv_path: str) -> None:
+    def save_to_csv(cls, chunks: List['Chunk'], csv_path: str) -> None:
         """Save chunks to CSV file"""
         if not chunks:
             return

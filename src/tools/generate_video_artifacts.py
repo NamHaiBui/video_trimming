@@ -9,12 +9,13 @@ from utils.config import PODCAST_METADATA_TABLE
 
 from tools.components.video.video_chunk_cutting_script import process_video_chunks, update_video_chunking_status
 from tools.components.video.video_quote_cutting_script import process_video_quotes, update_quote_video_status
-from tools.components.video.video_summary_cutting_script import process_video_summaries
+from tools.components.video.video_summary_cutting_script import process_video_summary, update_video_summary_status
+
 from models.summary_transcript_model import SummaryTranscriptModel
 from utils.dynamo_att_to_types import dynamodb_attribute_to_python_type
 from utils.logging_config import setup_custom_logger
 from utils.db_operations import get_all_chunks, get_all_quotes, get_summary_data
-
+                        
 logging = setup_custom_logger(__name__)
 
 
@@ -26,7 +27,7 @@ s3_client = boto3.client('s3')
 
 ffmpeg_path = which("ffmpeg")
 
-def generate_video_chunks_and_quotes(meta_data_idx, force_video_chunking=False, force_video_quote_extraction=False, force_video_summary_extraction=False):
+def generate_video_artifacts(meta_data_idx, force_video_chunking=False, force_video_quote_extraction=False, force_video_summary_extraction=False):
     """
     Generate video chunks, quotes, and summaries for a given podcast episode.
     Args:
@@ -190,9 +191,7 @@ def generate_video_chunks_and_quotes(meta_data_idx, force_video_chunking=False, 
                         logging.info(f"Summary video extraction in progress for ID: {meta_data_idx}, skipping processing...")
                     else:
                         logging.info(f"Summary video extraction not completed for ID: {meta_data_idx}, processing...")
-                        
-                        from tools.components.video.video_summary_cutting_script import update_video_summary_status
-                        
+
                         # Update metadata to mark summary processing as in progress
                         update_video_summary_status(podcast_title, episode_title, 'IN_PROGRESS')
 
@@ -201,7 +200,7 @@ def generate_video_chunks_and_quotes(meta_data_idx, force_video_chunking=False, 
                         if summary_transcript.summary_chunk_timestamps:
                             logging.info(f"Processing {len(summary_transcript.summary_chunk_timestamps)} video summary segments for {podcast_title}/{episode_title}")
                             
-                            video_summary_paths = process_video_summaries(
+                            video_summary_paths = process_video_summary(
                                 podcast_title=podcast_title,
                                 episode_title=episode_title,
                                 s3_video_key=s3_video_key,
@@ -224,7 +223,6 @@ def generate_video_chunks_and_quotes(meta_data_idx, force_video_chunking=False, 
                 
         except Exception as e:
             logging.error(f"Error processing video summaries: {e}")
-            from tools.components.video.video_summary_cutting_script import update_video_summary_status
             update_video_summary_status(podcast_title, episode_title, 'FAILED')
             raise e
 

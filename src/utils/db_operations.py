@@ -4,11 +4,14 @@ import tempfile
 from pydub import AudioSegment
 from boto3.dynamodb.conditions import Key
 from pydub.utils import which
+from typing import List, Optional
 
 from utils.config import CHUNK_TABLE, PODCAST_METADATA_TABLE, QUOTES_TABLE
 from utils.dynamo_att_to_types import dynamodb_attribute_to_python_type
 from utils.logging_config import setup_custom_logger
 from models.summary_transcript_model import SummaryTranscriptModel
+from models.chunk_model import Chunk
+from models.quote_model import Quote
 logging = setup_custom_logger(__name__)
 
 
@@ -129,9 +132,10 @@ def process_audio_chunks(final_summary_chunks, AUDIO_CHUNK_BUCKET, SUMMARY_BUCKE
             logging.error(f"Error uploading merged audio: {e}")
             return None
 
-def get_all_chunks(podcast_title:str, episode_title:str, num_chunks:int):
+def get_all_chunks(podcast_title: str, episode_title: str, num_chunks: int) -> List[Chunk]:
     """
     Retrieve all chunks for a specific podcast episode from DynamoDB.
+    Returns list of ChunkModel objects.
     """
     # Initialize DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
@@ -145,22 +149,38 @@ def get_all_chunks(podcast_title:str, episode_title:str, num_chunks:int):
                 Key('podcast_title').eq(podcast_title) & 
                 Key('episode_title#chunk_no').begins_with(episode_title)
         )
-        logging.info(f"Retrieved {len(response['Items'])} chunks")        
+        logging.info(f"Retrieved {len(response['Items'])} raw chunks from DynamoDB")        
+        
+        # Convert raw DynamoDB items to ChunkModel objects
+        chunks = []
+        for item in response['Items']:
+            try:
+                # Convert DynamoDB types to Python types
+                converted_item = {}
+                for key, value in item.items():
+                    converted_item[key] = dynamodb_attribute_to_python_type(value)
+                
+                # Create ChunkModel from converted data
+                chunk_model = Chunk.from_csv_row(converted_item)
+                chunks.append(chunk_model)
+            except Exception as e:
+                logging.error(f"Error converting chunk to ChunkModel: {e}")
+                continue
+        
         # Sort chunks based on chunk number
-        chunks = sorted(
-            response['Items'], 
-            key=lambda x: int(dynamodb_attribute_to_python_type(x['episode_title#chunk_no']).split('#')[1])
-        )
+        chunks = sorted(chunks, key=lambda x: int(x.chunk_number))
         
         # Validate the number of chunks
         if len(chunks) != num_chunks:
-            logging.warning(f"Expected {num_chunks} chunks, but retrieved {len(chunks)} chunks")
+            logging.warning(f"Expected {num_chunks} chunks, but converted {len(chunks)} chunks")
         
+        logging.info(f"Successfully converted {len(chunks)} chunks to ChunkModel objects")
         return chunks
     
     except Exception as e:
-        print(f"Error retrieving chunks: {e}")
+        logging.error(f"Error retrieving chunks: {e}")
         return []
+
 def get_summary_data(podcast_title, episode_title) -> SummaryTranscriptModel | None:
     """
     Retrieve summary data for a specific podcast episode from Summary Transcript Bucket.
@@ -207,9 +227,10 @@ def get_summary_data(podcast_title, episode_title) -> SummaryTranscriptModel | N
 
 
     
-def get_all_quotes(podcast_title, episode_title):
+def get_all_quotes(podcast_title: str, episode_title: str) -> List[Quote]:
     """
     Retrieve all quotes for a specific podcast episode from DynamoDB.
+    Returns list of Quote objects.
     """
     # Initialize DynamoDB resource
     dynamodb = boto3.resource('dynamodb')
@@ -223,56 +244,31 @@ def get_all_quotes(podcast_title, episode_title):
                 Key('podcast_title').eq(podcast_title) & 
                 Key('episode_title#quote_rank').begins_with(episode_title)
         )
-        logging.info(f"Retrieved {len(response['Items'])} quotes")        
-        # Sort quotes based on chunk number
-        quotes = sorted(
-            response['Items'], 
-            key=lambda x: int(dynamodb_attribute_to_python_type(x['episode_title#quote_rank']).split('#')[1])
-        )
+        logging.info(f"Retrieved {len(response['Items'])} raw quotes from DynamoDB")        
         
+        # Convert raw DynamoDB items to Quote objects
+        quotes = []
+        for item in response['Items']:
+            try:
+                # Convert DynamoDB types to Python types
+                converted_item = {}
+                for key, value in item.items():
+                    converted_item[key] = dynamodb_attribute_to_python_type(value)
+                
+                # Create Quote from converted data
+                quote = Quote(**converted_item)
+                quotes.append(quote)
+            except Exception as e:
+                logging.error(f"Error converting quote to Quote model: {e}")
+                continue
+        
+        # Sort quotes based on quote rank
+        quotes = sorted(quotes, key=lambda x: x.quote_rank)
+        
+        logging.info(f"Successfully converted {len(quotes)} quotes to Quote objects")
         return quotes
     
     except Exception as e:
-        print(f"Error retrieving quotes: {e}")
+        logging.error(f"Error retrieving quotes: {e}")
         return []
-def get_summary_transcript(podcast_title, episode_title):    
-    pass
-def convert_to_str(obj):
-    """ Recursively converts all values in a dictionary or list to strings """
-    if isinstance(obj, (int, float, bool)):
-        return str(obj)
-    elif isinstance(obj, list):
-        return [convert_to_str(item) for item in obj]
-    elif isinstance(obj, dict):
-        return {key: convert_to_str(value) for key, value in obj.items()}
-    return obj
 
-def update_summarization_status(podcast_title, episode_title, status, summary_metadata):
-    """
-    Update the summarization status for a podcast episode in DynamoDB.
-    """
-    # Initialize DynamoDB resource
-    dynamodb = boto3.resource('dynamodb')
-    # Badly typed environment variable, so we ignore type checking
-    metadata_table = dynamodb.Table(PODCAST_METADATA_TABLE) # type: ignore
-
-    try:
-        logging.info(f"Updating status for {podcast_title} - {episode_title}")
-        summary_metadata = convert_to_str(summary_metadata)
-        logging.info(f"Status: {status}, Metadata: {summary_metadata}")
-        # Update the status field for the specified episode
-        response = metadata_table.update_item(
-            Key={
-                'podcast_title': podcast_title,
-                'episode_title': episode_title
-            },
-            UpdateExpression="SET summarization_status = :s, summary_metadata = :m",
-            ExpressionAttributeValues={
-                ':s': status,
-                ':m': summary_metadata
-            }
-        )
-        logging.info(f"Successfully updated status to {status}")
-        return response
-    except Exception as e:
-        logging.error(f"Error updating status: {e}")

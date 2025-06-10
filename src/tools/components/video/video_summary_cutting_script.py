@@ -9,17 +9,18 @@ import urllib.parse
 
 from models.summary_transcript_model import SummaryTranscriptModel, SummaryChunkTimestamp
 from utils.config import PODCAST_METADATA_TABLE, VIDEO_BUCKET, VIDEO_SUMMARY_BUCKET
+from utils.dynamo_att_to_types import dynamodb_attribute_to_python_type
 
 dynamodb = boto3.resource('dynamodb')
 s3_client = boto3.client('s3')
 
-def process_video_summaries(podcast_title: str, 
+def process_video_summary(podcast_title: str, 
                            episode_title: str, 
                            s3_video_key: str,
                            summaries_info: SummaryTranscriptModel, 
                            overwrite: bool = True) -> List[Tuple[str, str]]:
     """
-    Cuts multiple video summary snippets from a single input file in one ffmpeg process.
+    Merges multiple video summary snippets from a single input file into one combined video.
     Uses SummaryTranscriptModel with merged timestamp intervals.
 
     Args:
@@ -30,7 +31,7 @@ def process_video_summaries(podcast_title: str,
         overwrite (bool): Whether to overwrite output files if they exist.
     
     Returns:
-        List[Tuple[str,str]]: List of (local_path, s3_key) tuples for processed videos
+        List[Tuple[str,str]]: List containing single (local_path, s3_key) tuple for the merged video
     """
     
     # Input validation
@@ -46,9 +47,6 @@ def process_video_summaries(podcast_title: str,
     safe_episode_title = "".join(c for c in episode_title if c.isalnum() or c in (' ', '-', '_')).strip()
 
     try:
-        video_summaries_paths_and_keys = []
-        output_operations = []
-        
         with tempfile.TemporaryDirectory() as temp_dir:
             # Change working directory to temp_dir for ffmpeg operations
             original_cwd = os.getcwd()
@@ -69,8 +67,8 @@ def process_video_summaries(podcast_title: str,
                 if not os.path.exists(full_video_path) or os.path.getsize(full_video_path) == 0:
                     raise Exception("Downloaded video file is empty or missing")
                 
-                # Process each summary chunk from SummaryTranscriptModel
-                valid_summaries_count = 0
+                # Collect valid summary chunks
+                valid_chunks = []
                 for i, summary_chunk in enumerate(summaries_info.summary_chunk_timestamps):
                     try:
                         start_time = summary_chunk.start_time
@@ -93,76 +91,97 @@ def process_video_summaries(podcast_title: str,
                             logging.warning(f"Skipping summary chunk {i+1} due to too short duration: {duration}s")
                             continue
                         
-                        # Use index as rank since SummaryChunkTimestamp doesn't have rank
-                        video_summary_filename = f"summary_{i+1}.mp4"
-                        s3_summary_key = f"{safe_podcast_title}/{safe_episode_title}/{video_summary_filename}"
-                        
-                        output_op = (
-                            ffmpeg
-                            .input(full_video_path, ss=start_time, t=duration)
-                            .output(video_summary_filename, 
-                                vcodec='libx264', 
-                                acodec='aac', 
-                                crf=23,
-                                preset='medium',
-                                movflags='faststart')
-                        )
-                        output_operations.append(output_op)
-                        video_summaries_paths_and_keys.append((video_summary_filename, s3_summary_key))
-                        valid_summaries_count += 1
-                        
-                        logging.info(f"Prepared summary chunk {i+1}/{len(summaries_info.summary_chunk_timestamps)} - {start_time:.2f}s to {end_time:.2f}s ({duration:.2f}s, {summary_chunk.word_count} words)")
+                        valid_chunks.append((start_time, end_time, duration, summary_chunk.word_count))
+                        logging.info(f"Added summary chunk {i+1}/{len(summaries_info.summary_chunk_timestamps)} - {start_time:.2f}s to {end_time:.2f}s ({duration:.2f}s, {summary_chunk.word_count} words)")
                         
                     except (ValueError, AttributeError) as e:
                         logging.error(f"Error processing summary chunk {i+1}: {e}")
                         continue
                 
-                if not output_operations:
+                if not valid_chunks:
                     logging.warning("No valid summaries found for processing")
                     return []
 
-                logging.info(f"Executing ffmpeg command for {valid_summaries_count} valid summaries...")
+                logging.info(f"Creating merged video from {len(valid_chunks)} valid summary chunks...")
                 
-                # Execute ffmpeg with better error handling
-                try:
-                    ffmpeg.run(tuple(output_operations), capture_stdout=True, capture_stderr=True, overwrite_output=overwrite)
-                except ffmpeg.Error as e:
-                    stderr_output = e.stderr.decode('utf8', errors='ignore') if isinstance(e.stderr, bytes) else str(e.stderr)
-                    logging.error(f"FFmpeg processing failed: {stderr_output}")
-                    raise Exception(f"Video processing failed: {stderr_output}")
-                
-                # Upload processed files
-                successful_uploads = []
-                for video_summary_path, s3_summary_key in video_summaries_paths_and_keys:
-                    local_path = os.path.join(temp_dir, video_summary_path)
+                # Create individual chunk files first
+                chunk_files = []
+                for i, (start_time, end_time, duration, word_count) in enumerate(valid_chunks):
+                    chunk_filename = f"chunk_{i+1}.mp4"
+                    chunk_files.append(chunk_filename)
                     
-                    if not os.path.exists(local_path):
-                        logging.error(f"Processed file '{video_summary_path}' does not exist after processing")
-                        continue
-                    
-                    if os.path.getsize(local_path) == 0:
-                        logging.error(f"Processed file '{video_summary_path}' is empty")
-                        continue
+                    # Extract individual chunk
+                    chunk_input = ffmpeg.input(full_video_path, ss=start_time, t=duration)
+                    chunk_output = ffmpeg.output(chunk_input, chunk_filename, 
+                                               vcodec='libx264', 
+                                               acodec='aac', 
+                                               crf=23,
+                                               preset='medium')
                     
                     try:
-                        s3_client.upload_file(
-                            local_path, 
-                            VIDEO_SUMMARY_BUCKET, 
-                            s3_summary_key, 
-                            ExtraArgs={
-                                "ContentType": "video/mp4", 
-                                "ACL": "public-read",
-                                "CacheControl": "max-age=3600"  
-                            }
-                        )
-                        successful_uploads.append((video_summary_path, s3_summary_key))
-                        logging.info(f"Uploaded {video_summary_path} to s3://{VIDEO_SUMMARY_BUCKET}/{s3_summary_key}")
-                    except ClientError as e:
-                        logging.error(f"Failed to upload {video_summary_path}: {e}")
-                        continue
+                        ffmpeg.run(chunk_output, capture_stdout=True, capture_stderr=True, overwrite_output=overwrite)
+                    except ffmpeg.Error as e:
+                        stderr_output = e.stderr.decode('utf8', errors='ignore') if isinstance(e.stderr, bytes) else str(e.stderr)
+                        logging.error(f"FFmpeg chunk extraction failed for chunk {i+1}: {stderr_output}")
+                        raise Exception(f"Chunk extraction failed: {stderr_output}")
                 
-                logging.info(f"Successfully processed and uploaded {len(successful_uploads)}/{len(video_summaries_paths_and_keys)} video summaries")
-                return successful_uploads
+                # Create concat file for ffmpeg
+                concat_filename = "concat_list.txt"
+                with open(concat_filename, 'w') as f:
+                    for chunk_file in chunk_files:
+                        f.write(f"file '{chunk_file}'\n")
+                
+                # Merge all chunks into final video
+                merged_video_filename = "merged_summary.mp4"
+                s3_summary_key = f"{safe_podcast_title}/{safe_episode_title}/{merged_video_filename}"
+                
+                try:
+                    # Use concat demuxer for better quality
+                    concat_input = ffmpeg.input(concat_filename, format='concat', safe=0)
+                    merged_output = ffmpeg.output(concat_input, merged_video_filename,
+                                                vcodec='copy',  # Copy streams for faster processing
+                                                acodec='copy',
+                                                movflags='faststart')
+                    
+                    ffmpeg.run(merged_output, capture_stdout=True, capture_stderr=True, overwrite_output=overwrite)
+                    logging.info(f"Successfully merged {len(valid_chunks)} chunks into {merged_video_filename}")
+                    
+                except ffmpeg.Error as e:
+                    stderr_output = e.stderr.decode('utf8', errors='ignore') if isinstance(e.stderr, bytes) else str(e.stderr)
+                    logging.error(f"FFmpeg merging failed: {stderr_output}")
+                    raise Exception(f"Video merging failed: {stderr_output}")
+                
+                # Verify merged file exists and has content
+                local_path = os.path.join(temp_dir, merged_video_filename)
+                if not os.path.exists(local_path):
+                    raise Exception(f"Merged file '{merged_video_filename}' does not exist after processing")
+                
+                if os.path.getsize(local_path) == 0:
+                    raise Exception(f"Merged file '{merged_video_filename}' is empty")
+                
+                # Upload merged video
+                try:
+                    s3_client.upload_file(
+                        local_path, 
+                        VIDEO_SUMMARY_BUCKET, 
+                        s3_summary_key, 
+                        ExtraArgs={
+                            "ContentType": "video/mp4", 
+                            "ACL": "public-read",
+                            "CacheControl": "max-age=3600"  
+                        }
+                    )
+                    logging.info(f"Uploaded merged video to s3://{VIDEO_SUMMARY_BUCKET}/{s3_summary_key}")
+                    
+                    total_duration = sum(chunk[2] for chunk in valid_chunks)
+                    total_words = sum(chunk[3] for chunk in valid_chunks)
+                    logging.info(f"Successfully processed merged video: {total_duration:.2f}s total duration, {total_words} total words")
+                    
+                    return [(merged_video_filename, s3_summary_key)]
+                    
+                except ClientError as e:
+                    logging.error(f"Failed to upload merged video: {e}")
+                    raise
                 
             finally:
                 # Restore original working directory

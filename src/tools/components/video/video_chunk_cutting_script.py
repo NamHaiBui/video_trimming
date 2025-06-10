@@ -9,6 +9,7 @@ import urllib.parse
 import ffmpeg
 from typing import List, Tuple, Dict, Any
 
+from models.chunk_model import Chunk
 from utils.config import  CHUNK_TABLE, PODCAST_METADATA_TABLE, VIDEO_BUCKET, VIDEO_CHUNK_BUCKET
 from utils.logging_config import setup_custom_logger
 
@@ -50,7 +51,7 @@ def check_if_exists_in_s3(bucket_name, s3_chunk_key):
 def process_video_chunks(podcast_title: str, 
                         episode_title: str, 
                         s3_video_key: str,
-                        chunks_info: List[Dict[str, Any]], 
+                        chunks_info: List[Chunk], 
                         overwrite: bool = True) -> List[Tuple[str, str]]:
     """
     Process video chunks from a single input file using ffmpeg in batch mode.
@@ -98,10 +99,17 @@ def process_video_chunks(podcast_title: str,
                         logging.info(f"Preparing chunk {i+1}/{len(chunks_info)} for {podcast_title}/{episode_title}")
                         
                         # Extract chunk information
-                        chunk_filename = f"{chunk['episode_title#chunk_no']}.mp4"
-                        time_stamps = chunk['time_stamps']
-                        start_time = time_stamps['start']
-                        end_time = time_stamps['end']
+                        chunk_filename = f"{chunk.episode_chunk_id}.mp4"
+                        time_stamps = chunk.time_stamps
+                        
+                        # Convert timestamps to float with validation
+                        try:
+                            start_time = float(time_stamps.start) if time_stamps.start else None
+                            end_time = float(time_stamps.end) if time_stamps.end else None
+                        except (ValueError, TypeError) as e:
+                            logging.warning(f"Skipping chunk {i+1} due to invalid timestamp format: start='{time_stamps.start}', end='{time_stamps.end}'. Error: {e}")
+                            continue
+                        
                         s3_chunk_key = f"{podcast_title}/{episode_title}/{chunk_filename}"
                         
                         if start_time is None or end_time is None:
