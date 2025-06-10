@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Main application
+  video-trimming:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: video-trimming-app
+    volumes:
+      - .:/app
+      - ./sample:/app/sample
+      - ./output:/app/output
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    environment:
+      - LOG_LEVEL=DEBUG
+      - TEMP_DIR=/app/temp
+      - PYTHONPATH=/app/src
+    ports:
+      - "8000:8000"  # For any web interface
+    stdin_open: true
+    tty: true
+    networks:
+      - video-trimming-network
+
+  # Local DynamoDB for development
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: video-trimming-dynamodb
+    ports:
+      - "8001:8000"
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "./data"]
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+    working_dir: /home/dynamodblocal
+    networks:
+      - video-trimming-network
+
+  # LocalStack for AWS services emulation
+  localstack:
+    image: localstack/localstack:latest
+    container_name: video-trimming-localstack
+    ports:
+      - "4566:4566"  # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services port range
+    env_file:
+      - .env.localstack
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - localstack-data:/tmp/localstack
+      - ./scripts:/opt/code/localstack/scripts  # Mount setup scripts
+    networks:
+      - video-trimming-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: video-trimming-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - video-trimming-network
+
+  # MinIO for S3-compatible storage
+  minio:
+    image: minio/minio:latest
+    container_name: video-trimming-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin123
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - video-trimming-network
+
+  # Monitoring with Prometheus (optional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: video-trimming-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    networks:
+      - video-trimming-network
+    profiles:
+      - monitoring
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: video-trimming-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - video-trimming-network
+    profiles:
+      - monitoring
+
+volumes:
+  dynamodb-data:
+  localstack-data:
+  redis-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  video-trimming-network:
+    driver: bridge
