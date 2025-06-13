@@ -117,14 +117,16 @@ class Quote:
     
     def _validate_url(self, url: str) -> str:
         if not url:
-            raise ValueError('URL cannot be empty')
+            # raise ValueError('URL cannot be empty')
+            pass
         try:
             result = urlparse(url)
             if not all([result.scheme, result.netloc]):
-                raise ValueError('Invalid URL format')
+                # raise ValueError('Invalid URL format')
+                pass
         except Exception:
             raise ValueError('Invalid URL format')
-        return url
+        return ''
     
     def _parse_datetime(self, value: Optional[str]) -> datetime:
         if isinstance(value, datetime):

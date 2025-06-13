@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 import sys
 import os
+from utils.logging_config import setup_custom_logger
+
+logging = setup_custom_logger(__name__)
 
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -129,9 +132,9 @@ class SummaryTranscriptModel:
         """
         if merge_threshold is None:
             merge_threshold = self.merge_threshold
-        
+        logging.info(f"Merging intervals with threshold: {len(word_timestamps)} seconds")
         # Convert word timestamps to intervals
-        intervals = self._convert_word_timestamps_to_intervals(word_timestamps)
+        intervals = [(word['start_time'], word['end_time'])   for word in word_timestamps]
         
         if not intervals:
             return []
@@ -143,8 +146,8 @@ class SummaryTranscriptModel:
         
         # Merge overlapping/close intervals
         merged_expanded = merge_intervals(expanded_intervals)
-        
-        # Convert back to original format (remove threshold expansion)
+        logging.info(f"Merged {len(merged_expanded)} intervals from {len(expanded_intervals)} original intervals")
+        logging.info(f"Expanded intervals: {merged_expanded}")
         merged_intervals = []
         for start, end in merged_expanded:
             merged_intervals.append([start, end - merge_threshold])
@@ -165,39 +168,9 @@ class SummaryTranscriptModel:
         
         return summary_chunks
     
-    @classmethod
-    def from_chunk_model(cls, chunk_model, summary_text: str = "", 
-                        merge_threshold: float = 1.0) -> 'SummaryTranscriptModel':
-        """
-        Create SummaryTranscriptModel from ChunkModel data
-        
-        Args:
-            chunk_model: ChunkModel instance
-            summary_text: Optional summary text
-            merge_threshold: Gap threshold for merging intervals
-        """
-        instance = cls(
-            episode_title=chunk_model.episode_title,
-            podcast_title=chunk_model.podcast_title,
-            total_duration=chunk_model.duration_seconds,
-            summary_text=summary_text,
-            summary_chunk_timestamps=[],
-            merge_threshold=merge_threshold
-        )
-        
-        # Convert word timestamps to summary chunks
-        word_timestamps_data = []
-        for word_timestamp in chunk_model.word_timestamps:
-            word_timestamps_data.append(word_timestamp.to_dict())
-        
-        instance.summary_chunk_timestamps = instance.merge_close_intervals(
-            word_timestamps_data, merge_threshold
-        )
-        
-        return instance
     
     @classmethod
-    def from_multiple_chunks(cls, chunk_models: List, podcast_title: str, 
+    def from_multiple_summary_chunks(cls, chunk_models: List[SummaryChunkTimestamp], podcast_title: str, 
                            episode_title: str, summary_text: str = "",
                            merge_threshold: float = 1.0) -> 'SummaryTranscriptModel':
         """
@@ -225,9 +198,8 @@ class SummaryTranscriptModel:
         total_duration = 0.0
         
         for chunk in chunk_models:
-            for word_timestamp in chunk.word_timestamps:
-                all_word_timestamps.append(word_timestamp.to_dict())
-            total_duration = max(total_duration, chunk.get_end_time_seconds())
+            all_word_timestamps.append(chunk.to_dict())
+            total_duration = max(total_duration, chunk.duration())
         
         instance = cls(
             episode_title=episode_title,
@@ -242,7 +214,7 @@ class SummaryTranscriptModel:
         instance.summary_chunk_timestamps = instance.merge_close_intervals(
             all_word_timestamps, merge_threshold
         )
-        
+        logging.info(f"Created SummaryTranscriptModel with {len(instance.summary_chunk_timestamps)} merged chunks")
         return instance
     
     def get_chunks_in_time_range(self, start_time: float, end_time: float) -> List[SummaryChunkTimestamp]:
@@ -288,28 +260,18 @@ class SummaryTranscriptModel:
         """Create from dictionary data"""
         chunks = [
             SummaryChunkTimestamp.from_dict(chunk_data)
-            for chunk_data in data.get('summary_chunk_timestamps', [])
+            for chunk_data in data.get('summary_timestamps', [])
         ]
-        
-        return cls(
+        logging.info(f"Loaded {len(chunks)} summary chunks from data")
+        return cls.from_multiple_summary_chunks(chunks,
             episode_title=data.get('episode_title', ''),
-            podcast_title=data.get('podcast_title', ''),
-            total_duration=float(data.get('total_duration', 0)),
-            summary_text=data.get('summary_text', ''),
-            summary_chunk_timestamps=chunks,
-            merge_threshold=float(data.get('merge_threshold', 1.0))
+            podcast_title=data.get('podcast_title', '')
         )
     
     @classmethod
-    def load_from_json(cls, json_path: str) -> 'SummaryTranscriptModel':
-        """Load from JSON file"""
-        json_file = Path(json_path)
-        
-        if not json_file.exists():
-            raise FileNotFoundError(f"JSON file not found: {json_path}")
-        
-        with open(json_file, 'r', encoding='utf-8') as file:
-            data = json.load(file)
+    def load_from_json(cls, json_str: str) -> 'SummaryTranscriptModel':
+        """Load from JSON string"""
+        data = json.loads(json_str)
         
         return cls.from_dict(data)
     

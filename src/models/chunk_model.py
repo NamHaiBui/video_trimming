@@ -1,9 +1,12 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import json
 import csv
 from pathlib import Path
-from ..utils.dynamo_att_to_types import dynamodb_attribute_to_python_type
+from utils.dynamo_att_to_types import dynamodb_attribute_to_python_type
+from utils.logging_config import setup_custom_logger
+
+logging = setup_custom_logger(__name__)
 
 @dataclass
 class WordTimestamp:
@@ -49,13 +52,16 @@ class TimeStamps:
     def from_dict(cls, data: Dict[str, Any]) -> 'TimeStamps':
         """Create TimeStamps from dictionary data"""
         if isinstance(data, dict):
-            # Use utility function to convert DynamoDB attributes
-            converted_data = dynamodb_attribute_to_python_type(data)
-            if isinstance(converted_data, dict):
-                return cls(
-                    start=str(converted_data.get('start', '')),
-                    end=str(converted_data.get('end', ''))
-                )
+            start_data = data.get('start', '')
+            end_data = data.get('end', '')
+            # Apply DynamoDB conversion to each field
+            start_value = dynamodb_attribute_to_python_type(start_data)
+            end_value = dynamodb_attribute_to_python_type(end_data)
+            
+            return cls(
+                start=str(start_value),
+                end=str(end_value)
+            )
         return cls('', '')
     
     def to_dict(self) -> Dict[str, Any]:
@@ -71,7 +77,7 @@ class Chunk:
     podcast_title: str
     episode_chunk_id: str  # episode_title#chunk_no
     chunk: str
-    chunk_audio_url: str
+    chunk_video_url: str
     chunk_description: str
     chunk_length: str
     chunk_title: str
@@ -109,7 +115,7 @@ class Chunk:
         try:
             sentiment_data = json.loads(row.get('sentiment', '[]'))
             if isinstance(sentiment_data, list):
-                sentiment = [str(dynamodb_attribute_to_python_type(item)) for item in sentiment_data if dynamodb_attribute_to_python_type(item)]
+                sentiment = [str(item) for item in sentiment_data]
         except (json.JSONDecodeError, TypeError):
             sentiment = []
         
@@ -118,7 +124,7 @@ class Chunk:
         try:
             speakers_data = json.loads(row.get('speakers', '[]'))
             if isinstance(speakers_data, list):
-                speakers = [str(dynamodb_attribute_to_python_type(item)) for item in speakers_data if dynamodb_attribute_to_python_type(item)]
+                speakers = [str(item) for item in speakers_data ]
         except (json.JSONDecodeError, TypeError):
             speakers = []
         
@@ -127,15 +133,17 @@ class Chunk:
         try:
             topics_data = json.loads(row.get('topics', '[]'))
             if isinstance(topics_data, list):
-                topics = [str(dynamodb_attribute_to_python_type(item)) for item in topics_data if dynamodb_attribute_to_python_type(item)]
+                topics = [str(item) for item in topics_data ]
         except (json.JSONDecodeError, TypeError):
             topics = []
         
         # Parse time_stamps
         time_stamps = TimeStamps('', '')
         try:
-            time_stamps_data = json.loads(row.get('time_stamps', '{}'))
-            time_stamps = TimeStamps.from_dict(time_stamps_data)
+            time_stamps_data = row.get('time_stamps', '{}')
+            logging.info(f"Parsed time_stamps data: {time_stamps_data}")
+            if isinstance(time_stamps_data, dict):
+                time_stamps = TimeStamps.from_dict(time_stamps_data)
         except (json.JSONDecodeError, TypeError):
             pass
         
@@ -151,7 +159,7 @@ class Chunk:
             podcast_title=row.get('podcast_title', ''),
             episode_chunk_id=row.get('episode_title#chunk_no', ''),
             chunk=row.get('chunk', ''),
-            chunk_audio_url=row.get('chunk_audio_url', ''),
+            chunk_video_url=row.get('chunk_video_url', ''),
             chunk_description=row.get('chunk_description', ''),
             chunk_length=row.get('chunk_length', ''),
             chunk_title=row.get('chunk_title', ''),
@@ -185,7 +193,7 @@ class Chunk:
             'podcast_title': self.podcast_title,
             'episode_title#chunk_no': self.episode_chunk_id,
             'chunk': self.chunk,
-            'chunk_audio_url': self.chunk_audio_url,
+            'chunk_video_url': self.chunk_video_url,
             'chunk_description': self.chunk_description,
             'chunk_length': self.chunk_length,
             'chunk_title': self.chunk_title,
@@ -205,7 +213,7 @@ class Chunk:
             'episode_title': self.episode_title,
             'chunk_number': self.chunk_number,
             'chunk': self.chunk,
-            'chunk_audio_url': self.chunk_audio_url,
+            'chunk_video_url': self.chunk_video_url,
             'chunk_description': self.chunk_description,
             'chunk_length': self.chunk_length,
             'chunk_title': self.chunk_title,
@@ -253,7 +261,7 @@ class Chunk:
         csv_file.parent.mkdir(parents=True, exist_ok=True)
         
         fieldnames = [
-            'podcast_title', 'episode_title#chunk_no', 'chunk', 'chunk_audio_url',
+            'podcast_title', 'episode_title#chunk_no', 'chunk', 'chunk_video_url',
             'chunk_description', 'chunk_length', 'chunk_title', 'chunk_uuid',
             'genre', 'sentiment', 'speakers', 'time_stamps', 'topics', 'word_timestamps'
         ]
