@@ -9,7 +9,6 @@ from tools.components.video.video_summary_cutting_script import process_video_su
 from tools.generate_video_artifacts import generate_video_artifacts
 from utils.config import QUEUE_URL
 from utils.logging_config import setup_custom_logger
-from utils.db_operations import get_all_chunks, process_audio_chunks
 
 # Set up logging
 logging = setup_custom_logger(__name__)
@@ -31,13 +30,7 @@ else:
     # Initialize SQS client for AWS
     sqs = boto3.client('sqs', region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
     logging.info("Using AWS SQS endpoint")
-
-# # SQS Queue URL - set this as an environment variable
-# QUEUE_URL = os.getenv('SQS_QUEUE_URL', 'https://sqs.us-east-1.amazonaws.com/123456789012/MyQueue')
-# CHUNK_TABLE = os.environ.get("CHUNK_TABLE", "TrancriptChunkStore")
-# AUDIO_CHUNK_BUCKET = os.environ.get("AUDIO_CHUNK_BUCKET", "pd-audio-chunks-storage")
-# SUMMARY_BUCKET = os.environ.get("SUMMARY_BUCKET", "pd-audio-summary-storage")
-
+    
 def process_sqs_message(message_body):
     """
     Process a single SQS message by extracting the metadata ID and generating video artifacts.
@@ -239,12 +232,12 @@ def main():
             'statusCode': 500,
             'body': f"Error: No quotes found for the episode."
         }
-    # if not summary_result:
-    #     logging.error("No summary result found for the episode.")
-    #     return {
-    #         'statusCode': 500,
-    #         'body': f"Error: No summary result found for the episode."
-    #     }
+    if not summary_result:
+        logging.error("No summary result found for the episode.")
+        return {
+            'statusCode': 500,
+            'body': f"Error: No summary result found for the episode."
+        }
     logging.info("Task complete.")
 
 if __name__ == "__main__":

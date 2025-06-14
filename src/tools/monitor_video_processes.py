@@ -1,6 +1,7 @@
-#!/usr/bin/env python3
+
 """
 Monitor video processing background jobs and their status.
+Fixed version with enhanced error handling.
 """
 
 import sys
@@ -10,6 +11,7 @@ import json
 import argparse
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+import traceback
 
 # Add the src directory to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -41,6 +43,17 @@ class VideoProcessMonitor:
                 return None
             
             item = items[0]
+            
+            # Handle DynamoDB type conversion for numbers
+            last_updated_raw = item.get('last_updated', 0)
+            last_updated = int(last_updated_raw) if isinstance(last_updated_raw, (int, str)) else 0
+            
+            num_chunks_raw = item.get('num_chunks', 0)
+            num_chunks = int(num_chunks_raw) if isinstance(num_chunks_raw, (int, str)) else 0
+            
+            num_quotes_raw = item.get('num_quotes', 0)
+            num_quotes = int(num_quotes_raw) if isinstance(num_quotes_raw, (int, str)) else 0
+            
             return {
                 'episode_id': episode_id,
                 'podcast_title': str(item.get('podcast_title', '')),
@@ -49,9 +62,9 @@ class VideoProcessMonitor:
                 'video_chunking_status': str(item.get('video_chunking_status', 'PENDING')),
                 'quotes_video_status': str(item.get('quotes_video_status', 'PENDING')),
                 'summaries_video_status': str(item.get('summaries_video_status', 'PENDING')),
-                'last_updated': int(item.get('last_updated', 0)) if item.get('last_updated') else 0,
-                'num_chunks': int(item.get('num_chunks', 0)) if item.get('num_chunks') else 0,
-                'num_quotes': int(item.get('num_quotes', 0)) if item.get('num_quotes') else 0
+                'last_updated': last_updated,
+                'num_chunks': num_chunks,
+                'num_quotes': num_quotes
             }
         except Exception as e:
             logging.error(f"Error getting episode status: {e}")
@@ -68,6 +81,10 @@ class VideoProcessMonitor:
             
             episodes = []
             for item in response.get('Items', []):
+                # Handle DynamoDB type conversion for numbers
+                last_updated_raw = item.get('last_updated', 0)
+                last_updated = int(last_updated_raw) if isinstance(last_updated_raw, (int, str)) else 0
+                
                 episodes.append({
                     'episode_id': str(item.get('id', '')),
                     'podcast_title': str(item.get('podcast_title', '')),
@@ -75,7 +92,7 @@ class VideoProcessMonitor:
                     'video_chunking_status': str(item.get('video_chunking_status', 'PENDING')),
                     'quotes_video_status': str(item.get('quotes_video_status', 'PENDING')), 
                     'summaries_video_status': str(item.get('summaries_video_status', 'PENDING')),
-                    'last_updated': int(item.get('last_updated', 0)) if item.get('last_updated') else 0
+                    'last_updated': last_updated
                 })
             
             return episodes
@@ -91,74 +108,85 @@ class VideoProcessMonitor:
         print(f"Episode: {episode_data['episode_title']}")
         
         if include_details:
-            print(f"Chunks: {episode_data['num_chunks']}")
-            print(f"Quotes: {episode_data['num_quotes']}")
+            print(f"Chunks: {episode_data.get('num_chunks', 0)}")
+            print(f"Quotes: {episode_data.get('num_quotes', 0)}")
         
         print(f"\nProcessing Status:")
-        print(f"  Chunking (base): {episode_data['chunking_status']}")
-        print(f"  Video Chunks:    {self._format_status(episode_data['video_chunking_status'])}")
-        print(f"  Video Quotes:    {self._format_status(episode_data['quotes_video_status'])}")
-        print(f"  Video Summaries: {self._format_status(episode_data['summaries_video_status'])}")
+        print(f"  Chunking (base): {episode_data.get('chunking_status', 'UNKNOWN')}")
+        print(f"  Video Chunks:    {self._format_status(episode_data.get('video_chunking_status', 'UNKNOWN'))}")
+        print(f"  Video Quotes:    {self._format_status(episode_data.get('quotes_video_status', 'UNKNOWN'))}")
+        print(f"  Video Summaries: {self._format_status(episode_data.get('summaries_video_status', 'UNKNOWN'))}")
         
-        if episode_data['last_updated']:
+        if episode_data.get('last_updated', 0) > 0:
             last_updated = datetime.fromtimestamp(episode_data['last_updated'])
             print(f"\nLast Updated: {last_updated.strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
     def _format_status(self, status: str) -> str:
-        """Format status with color indicators (if terminal supports it)"""
-        status_colors = {
-            'COMPLETED': '✅',
-            'IN_PROGRESS': '🔄', 
-            'FAILED': '❌',
-            'PENDING': '⏳'
+        """Format status with emoji indicators"""
+        status_icons = {
+            'COMPLETED': '✅ COMPLETED',
+            'IN_PROGRESS': '🔄 IN_PROGRESS', 
+            'PENDING': '⏳ PENDING',
+            'FAILED': '❌ FAILED',
+            'SKIPPED': '⏭️ SKIPPED'
         }
-        icon = status_colors.get(status, '❓')
-        return f"{icon} {status}"
+        return status_icons.get(status, f'❓ {status}')
     
-    def monitor_episode(self, episode_id: str, interval: int = 30, timeout: int = 3600):
+    def monitor_episode(self, episode_id: str, check_interval: int = 30, timeout_seconds: int = 3600) -> bool:
         """Monitor a specific episode until completion or timeout"""
-        print(f"Monitoring episode {episode_id} (checking every {interval}s, timeout: {timeout}s)")
+        start_time = time.time()
+        print(f"🔄 Monitoring episode {episode_id} (timeout: {timeout_seconds}s)")
         
-        start_time = datetime.now()
-        timeout_time = start_time + timedelta(seconds=timeout)
-        
-        while datetime.now() < timeout_time:
-            status = self.get_episode_status(episode_id)
-            if not status:
-                print(f"Episode {episode_id} not found")
-                return False
-            
-            self.print_status(status)
-            
-            # Check if all processes are complete
-            video_statuses = [
-                status['video_chunking_status'],
-                status['quotes_video_status'], 
-                status['summaries_video_status']
-            ]
-            
-            if all(s in ['COMPLETED', 'FAILED'] for s in video_statuses):
+        try:
+            while True:
+                elapsed = time.time() - start_time
+                if elapsed > timeout_seconds:
+                    print(f"⏰ Timeout reached after {elapsed:.0f} seconds")
+                    return False
+                
+                status = self.get_episode_status(episode_id)
+                if not status:
+                    print(f"❌ Episode {episode_id} not found")
+                    return False
+                
+                # Check if all video processes are completed
+                video_statuses = [
+                    status['video_chunking_status'],
+                    status['quotes_video_status'], 
+                    status['summaries_video_status']
+                ]
+                
                 completed_count = sum(1 for s in video_statuses if s == 'COMPLETED')
                 failed_count = sum(1 for s in video_statuses if s == 'FAILED')
+                in_progress_count = sum(1 for s in video_statuses if s == 'IN_PROGRESS')
                 
-                print(f"\n🎉 All processes finished! Completed: {completed_count}, Failed: {failed_count}")
-                return failed_count == 0
-            
-            # Check if any are still in progress
-            if any(s == 'IN_PROGRESS' for s in video_statuses):
-                print(f"\n⏰ Still processing... Next check in {interval}s")
-                time.sleep(interval)
-            else:
-                print(f"\n⏸️  No processes currently running")
-                return True
-        
-        print(f"\n⏰ Monitoring timeout reached after {timeout}s")
-        return False
+                print(f"[{datetime.now().strftime('%H:%M:%S')}] Status: ✅{completed_count} 🔄{in_progress_count} ❌{failed_count}")
+                
+                # All completed
+                if completed_count == 3:
+                    print(f"🎉 All video processing completed for episode {episode_id}")
+                    return True
+                
+                # Any failed
+                if failed_count > 0:
+                    print(f"❌ {failed_count} process(es) failed for episode {episode_id}")
+                    self.print_status(status, include_details=False)
+                    return False
+                
+                time.sleep(check_interval)
+                
+        except KeyboardInterrupt:
+            print("\n👋 Monitoring stopped by user")
+            return False
+        except Exception as e:
+            print(f"❌ Error monitoring episode: {e}")
+            logging.error(f"Monitor error: {e}")
+            return False
     
-    def monitor_all_in_progress(self, interval: int = 60):
-        """Monitor all episodes with processes in progress"""
-        print(f"Monitoring all in-progress episodes (checking every {interval}s)")
-        print("Press Ctrl+C to stop monitoring\n")
+    def monitor_all_in_progress(self, interval: int = 30):
+        """Monitor all episodes currently in progress"""
+        print(f"🔄 Monitoring all in-progress episodes (check interval: {interval}s)")
+        print("Press Ctrl+C to stop monitoring")
         
         try:
             while True:
@@ -194,40 +222,52 @@ def main():
     
     monitor = VideoProcessMonitor()
     
-    if args.status:
-        # Get status of specific episode
-        status = monitor.get_episode_status(args.status)
-        if not status:
-            print(f"Episode {args.status} not found")
-            return 1
+    try:
+        if args.status:
+            # Get status of specific episode
+            status = monitor.get_episode_status(args.status)
+            if not status:
+                print(f"Episode {args.status} not found")
+                return 1
+            
+            if args.json:
+                print(json.dumps(status, indent=2))
+            else:
+                monitor.print_status(status)
+            return 0
         
-        if args.json:
-            print(json.dumps(status, indent=2))
+        elif args.episode_id:
+            # Monitor specific episode
+            success = monitor.monitor_episode(args.episode_id, args.interval, args.timeout)
+            return 0 if success else 1
+        
+        elif args.all:
+            # Monitor all in-progress episodes
+            monitor.monitor_all_in_progress(args.interval)
+            return 0
+        
         else:
-            monitor.print_status(status)
-        return 0
+            # Default: show all in-progress episodes once
+            episodes = monitor.get_all_in_progress_episodes()
+            if episodes:
+                print(f"Found {len(episodes)} episodes with video processing in progress:")
+                for episode in episodes:
+                    if args.json:
+                        print(json.dumps(episode, indent=2))
+                    else:
+                        monitor.print_status(episode)
+            else:
+                print("No episodes with video processing in progress")
+            return 0
     
-    elif args.episode_id:
-        # Monitor specific episode
-        success = monitor.monitor_episode(args.episode_id, args.interval, args.timeout)
-        return 0 if success else 1
-    
-    elif args.all:
-        # Monitor all in-progress episodes
-        monitor.monitor_all_in_progress(args.interval)
+    except KeyboardInterrupt:
+        print("\n👋 Stopped by user")
         return 0
-    
-    else:
-        # Show current in-progress episodes
-        episodes = monitor.get_all_in_progress_episodes()
-        if not episodes:
-            print("No episodes currently in progress")
-        else:
-            print(f"Found {len(episodes)} episodes in progress:")
-            for episode in episodes:
-                monitor.print_status(episode, include_details=False)
-        return 0
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        logging.error(f"Main error: {e}")
+        logging.error(f"Traceback: {traceback.format_exc()}")
+        return 1
 
-if __name__ == '__main__':
-    import sys
+if __name__ == "__main__":
     sys.exit(main())

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Dependency checker for the Video Trimming Project.
 This script validates that all required dependencies are installed and configured correctly.

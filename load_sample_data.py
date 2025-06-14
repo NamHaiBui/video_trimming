@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Script to load sample CSV data into DynamoDB tables and upload sample files to S3
 """
@@ -36,6 +36,9 @@ from models.chunk_model import Chunk
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Increase CSV field size limit to handle large fields
+csv.field_size_limit(1000000)  # 1MB limit
+
 def parse_json_field(field_value):
     """Parse JSON field from CSV, return empty dict/list if parsing fails"""
     if not field_value or field_value.strip() == '':
@@ -57,7 +60,7 @@ def convert_csv_row_to_dynamodb_chunk_item(row: Dict[str, str]) -> Dict[str, Any
     
     # Create DynamoDB item
     item = {
-        'podcast_title': row.get('podcast_title', ''),
+        'podcast_title': row.get('podcast_title', '').strip('"'),  # Strip quotes from podcast title
         'episode_title#chunk_no': row.get('episode_title#chunk_no', ''),
         'chunk': row.get('chunk', ''),
         'chunk_audio_url': row.get('chunk_audio_url', ''),
@@ -130,7 +133,7 @@ def load_quotes_from_csv(csv_path: str) -> int:
             for row_num, row in enumerate(reader, 1):
                 try:
                     item = {
-                        'podcast_title': row.get('podcast_title', ''),
+                        'podcast_title': row.get('podcast_title', '').strip('"'),  # Strip quotes from podcast title
                         'episode_title#quote_rank': row.get('episode_title#quote_rank', ''),
                         'absolute_context_word_timestamps': parse_json_field(row.get('absolute_context_word_timestamps', '[]')),
                         'absolute_quote_word_timestamps': parse_json_field(row.get('absolute_quote_word_timestamps', '[]')),
@@ -324,7 +327,7 @@ def main():
                 reader = csv.DictReader(file)
                 first_row = next(reader, None)
                 if first_row:
-                    podcast_title = first_row.get('podcast_title', '')
+                    podcast_title = first_row.get('podcast_title', '').strip('"')  # Strip quotes
                     episode_chunk_id = first_row.get('episode_title#chunk_no', '')
                     episode_title = episode_chunk_id.split('#')[0] if '#' in episode_chunk_id else episode_chunk_id
                     

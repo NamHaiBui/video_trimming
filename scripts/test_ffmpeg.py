@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 FFmpeg functionality test script for the Video Trimming Project.
 This script tests various FFmpeg capabilities required by the application.
@@ -84,6 +84,8 @@ class FFmpegTester:
         
         if not self.ffprobe_path:
             self.print_error("FFprobe not found")
+            self.test_results['installation'] = False
+            return False
             self.test_results['installation'] = False
             return False
         

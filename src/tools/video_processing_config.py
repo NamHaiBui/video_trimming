@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Configuration for video processing background jobs
 """
@@ -48,23 +48,21 @@ class VideoProcessingConfig:
     USE_GPU_ACCELERATION = os.getenv('USE_GPU_ACCELERATION', 'false').lower() == 'true'
     GPU_DEVICE = os.getenv('GPU_DEVICE', '0')
     
-    # Codec preferences
-    VIDEO_CODEC_PRIORITY = os.getenv('VIDEO_CODEC_PRIORITY', 'h264_vaapi,libx264,h264_nvenc').split(',')
     AUDIO_CODEC = os.getenv('AUDIO_CODEC', 'aac')
     
     @classmethod
     def get_ffmpeg_codec(cls, prefer_gpu: Optional[bool] = None) -> str:
-        """Get the best available FFmpeg video codec"""
-        if prefer_gpu is None:
-            prefer_gpu = cls.USE_GPU_ACCELERATION
+        # """Get the best available FFmpeg video codec"""
+        # if prefer_gpu is None:
+        #     prefer_gpu = cls.USE_GPU_ACCELERATION
         
-        if prefer_gpu:
-            # Prefer GPU codecs
-            for codec in ['h264_nvenc', 'h264_vaapi', 'libx264']:
-                if codec in cls.VIDEO_CODEC_PRIORITY:
-                    return codec
+        # if prefer_gpu:
+        #     # Prefer GPU codecs
+        #     for codec in ['h264_nvenc', 'h264_vaapi', 'libx264']:
+        #         if codec in cls.VIDEO_CODEC_PRIORITY:
+        #             return codec
         
-        # Fallback to CPU codec
+        # # Fallback to CPU codec
         return 'libx264'
     
     @classmethod
@@ -129,6 +127,84 @@ class VideoProcessingConfig:
         print(f"Video Codec: {cls.get_ffmpeg_codec()}")
         print(f"Audio Codec: {cls.AUDIO_CODEC}")
         print(f"Process Priorities: {cls.PROCESS_PRIORITIES}")
+
+def get_processing_config() -> Dict[str, Any]:
+    """
+    Get the current processing configuration as a dictionary
+    
+    Returns:
+        Dict containing all configuration settings
+    """
+    return {
+        # Concurrency settings
+        'max_concurrent_processes': VideoProcessingConfig.MAX_CONCURRENT_PROCESSES,
+        'max_concurrent_chunks': VideoProcessingConfig.MAX_CONCURRENT_CHUNKS,
+        'max_concurrent_quotes': VideoProcessingConfig.MAX_CONCURRENT_QUOTES,
+        'max_concurrent_summaries': VideoProcessingConfig.MAX_CONCURRENT_SUMMARIES,
+        
+        # Timeout settings
+        'chunk_processing_timeout': VideoProcessingConfig.CHUNK_PROCESSING_TIMEOUT,
+        'quote_processing_timeout': VideoProcessingConfig.QUOTE_PROCESSING_TIMEOUT,
+        'summary_processing_timeout': VideoProcessingConfig.SUMMARY_PROCESSING_TIMEOUT,
+        
+        # Retry settings
+        'max_retries': VideoProcessingConfig.MAX_RETRIES,
+        'retry_delay': VideoProcessingConfig.RETRY_DELAY,
+        
+        # Resource limits
+        'max_memory_mb': VideoProcessingConfig.MAX_MEMORY_MB,
+        'temp_dir': VideoProcessingConfig.TEMP_DIR,
+        
+        # Process priorities
+        'process_priorities': VideoProcessingConfig.PROCESS_PRIORITIES.copy(),
+        
+        # Monitoring settings
+        'status_check_interval': VideoProcessingConfig.STATUS_CHECK_INTERVAL,
+        'heartbeat_interval': VideoProcessingConfig.HEARTBEAT_INTERVAL,
+        
+        # FFmpeg settings
+        'ffmpeg_threads': VideoProcessingConfig.FFMPEG_THREADS,
+        'ffmpeg_preset': VideoProcessingConfig.FFMPEG_PRESET,
+        'ffmpeg_crf': VideoProcessingConfig.FFMPEG_CRF,
+        
+        # Hardware acceleration
+        'use_gpu_acceleration': VideoProcessingConfig.USE_GPU_ACCELERATION,
+        'gpu_device': VideoProcessingConfig.GPU_DEVICE,
+    }
+
+def get_config_for_process(process_type: str) -> Dict[str, Any]:
+    """
+    Get configuration specific to a process type
+    
+    Args:
+        process_type: 'chunks', 'quotes', or 'summaries'
+        
+    Returns:
+        Dict containing process-specific configuration
+    """
+    base_config = get_processing_config()
+    
+    timeout_map = {
+        'chunks': base_config['chunk_processing_timeout'],
+        'quotes': base_config['quote_processing_timeout'], 
+        'summaries': base_config['summary_processing_timeout']
+    }
+    
+    return {
+        'timeout': timeout_map.get(process_type, 1800),
+        'priority': base_config['process_priorities'].get(process_type, 2),
+        'max_retries': base_config['max_retries'],
+        'retry_delay': base_config['retry_delay'],
+        'max_memory_mb': base_config['max_memory_mb'],
+        'temp_dir': base_config['temp_dir'],
+        'ffmpeg_settings': {
+            'threads': base_config['ffmpeg_threads'],
+            'preset': base_config['ffmpeg_preset'],
+            'crf': base_config['ffmpeg_crf'],
+            'use_gpu': base_config['use_gpu_acceleration'],
+            'gpu_device': base_config['gpu_device']
+        }
+    }
 
 if __name__ == '__main__':
     # Print current configuration when run directly

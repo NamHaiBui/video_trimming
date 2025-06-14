@@ -146,8 +146,8 @@ class SummaryTranscriptModel:
         
         # Merge overlapping/close intervals
         merged_expanded = merge_intervals(expanded_intervals)
-        logging.info(f"Merged {len(merged_expanded)} intervals from {len(expanded_intervals)} original intervals")
-        logging.info(f"Expanded intervals: {merged_expanded}")
+        # logging.info(f"Merged {len(merged_expanded)} intervals from {len(expanded_intervals)} original intervals")
+        # logging.info(f"Expanded intervals: {merged_expanded}")
         merged_intervals = []
         for start, end in merged_expanded:
             merged_intervals.append([start, end - merge_threshold])

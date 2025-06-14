@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 Cross-platform FFmpeg installer for the Video Trimming Project.
 This script downloads and installs FFmpeg static builds when package managers are not available.
@@ -21,6 +21,27 @@ class FFmpegInstaller:
     """Cross-platform FFmpeg installer."""
     
     def __init__(self):
+        self.system = platform.system().lower()
+        self.machine = platform.machine().lower()
+        self.home_dir = Path.home()
+        self.local_bin = self.home_dir / '.local' / 'bin'
+        
+        # Official FFmpeg builds
+        self.urls = {
+            'linux': {
+                'x86_64': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz',
+                'i686': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux32-gpl.tar.xz',
+                'aarch64': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz',
+            },
+            'darwin': {
+                'x86_64': 'https://evermeet.cx/ffmpeg/getrelease/zip',
+                'arm64': 'https://evermeet.cx/ffmpeg/getrelease/zip',
+            },
+            'windows': {
+                'amd64': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip',
+                'i386': 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win32-gpl.zip',
+            }
+        }
         self.system = platform.system().lower()
         self.machine = platform.machine().lower()
         self.home_dir = Path.home()
