@@ -2,7 +2,12 @@ import os
 import shutil
 from pathlib import Path
 
+# SQS Configuration
+QUEUE_URL = os.getenv('SQS_QUEUE_URL', 'https://sqs.us-east-1.amazonaws.com/123456789012/VideoTrimmingSQueueS')
+
+# Dynamo
 PODCAST_METADATA_TABLE=os.environ.get("PODCAST_METADATA_TABLE", "PodcastEpisodeStore")
+#
 QUOTES_TABLE = os.environ.get("QUOTES_TABLE", "TranscriptQuoteStore")
 CHUNK_TABLE=os.environ.get("CHUNK_TABLE", "TranscriptChunkStore")
 # root file
