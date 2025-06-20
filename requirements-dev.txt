@@ -25,9 +25,6 @@ factory-boy>=3.3.0
 freezegun>=1.2.2
 responses>=0.23.0
 moto>=4.2.0  # For mocking AWS services
-localstack-client>=2.3.0  # LocalStack integration
-awscli-local>=0.21  # LocalStack AWS CLI wrapper
-
 
 # Type Checking
 types-requests>=2.31.0

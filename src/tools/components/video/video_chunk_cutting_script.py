@@ -177,10 +177,9 @@ def update_video_chunking_status(podcast_title, episode_title, status):
                 'podcast_title': podcast_title,
                 'episode_title': episode_title
             },
-            UpdateExpression='SET video_chunking_status = :status, last_updated = :timestamp',
+            UpdateExpression='SET video_chunking_status = :status',
             ExpressionAttributeValues={
                 ':status': status,
-                ':timestamp': int(__import__('time').time())
             },
             ReturnValues='UPDATED_NEW'
         )
@@ -189,35 +188,3 @@ def update_video_chunking_status(podcast_title, episode_title, status):
     except ClientError as e:
         logging.error(f"Error updating video chunking status: {e}")
         raise
-
-def update_chunk_video_urls_in_dynamo(podcast_title, episode_title, chunks: List[Chunk]):
-    """Update chunk video URLs in DynamoDB."""
-    if not podcast_title or not episode_title or not chunks:
-        return []
-    
-    BASE_S3_VIDEO_CHUNK_URL = f"https://{VIDEO_CHUNK_BUCKET}.s3.amazonaws.com"
-    table = dynamodb.Table(CHUNK_TABLE)
-    
-    for chunk in chunks:
-        try:
-            s3_key = f"{podcast_title}/{episode_title}/{chunk.episode_chunk_id}.mp4"
-            encoded_key = urllib.parse.quote(s3_key, safe='')
-            chunk_video_url = f"{BASE_S3_VIDEO_CHUNK_URL}/{encoded_key}"
-            chunk.chunk_video_url = chunk_video_url
-
-            table.update_item(
-                Key={
-                    'podcast_title': chunk.podcast_title,
-                    'episode_title#chunk_no': chunk.episode_chunk_id
-                },
-                UpdateExpression='SET chunk_video_url = :url, last_updated = :timestamp',
-                ExpressionAttributeValues={
-                    ':url': chunk_video_url,
-                    ':timestamp': int(__import__('time').time())
-                }
-            )
-            logging.info(f"Updated chunk_video_url for {chunk.episode_chunk_id}")
-        except Exception as e:
-            logging.error(f"Failed to update {chunk.episode_chunk_id}: {e}")
-
-    return chunks

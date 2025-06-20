@@ -132,7 +132,6 @@ def process_video_quotes(podcast_title: str,
                             ExtraArgs={
                                 "ContentType": "video/mp4", 
                                 "ACL": "public-read",
-                                "CacheControl": "max-age=3600"  
                             }
                         )
                         successful_uploads.append((quote_filename, s3_quote_key))
@@ -165,10 +164,9 @@ def update_quote_video_status(podcast_title, episode_title, status):
                 'podcast_title': podcast_title,
                 'episode_title': episode_title
             },
-            UpdateExpression='SET quotes_video_status = :status, last_updated = :timestamp',
+            UpdateExpression='SET quotes_video_status = :status',
             ExpressionAttributeValues={
                 ':status': status,
-                ':timestamp': int(__import__('time').time())
             },
             ReturnValues='UPDATED_NEW'
         )
@@ -177,55 +175,3 @@ def update_quote_video_status(podcast_title, episode_title, status):
     except ClientError as e:
         logging.error(f"Error updating quote video status: {e}")
         raise
-
-def update_quote_video_urls_in_dynamo(podcast_title, episode_title, quotes):
-    """Update quote video URLs in DynamoDB."""
-    if not podcast_title or not episode_title or not quotes:
-        return []
-    
-    safe_podcast_title = "".join(c for c in podcast_title if c.isalnum() or c in (' ', '-', '_')).strip()
-    safe_episode_title = "".join(c for c in episode_title if c.isalnum() or c in (' ', '-', '_')).strip()
-    
-    table = dynamodb.Table(QUOTES_TABLE)
-    BASE_S3_VIDEO_URL = f"https://{VIDEO_QUOTE_BUCKET}.s3.amazonaws.com"
-    
-    for quote in quotes:
-        try:
-            # Handle both dictionary and object formats
-            if hasattr(quote, 'quote_rank'):
-                quote_rank = quote.quote_rank
-                sk = f"{episode_title}#{quote_rank}"
-            elif isinstance(quote, dict) and 'quote_rank' in quote:
-                quote_rank = quote['quote_rank']
-                sk = f"{episode_title}#{quote_rank}"
-            else:
-                logging.error(f"Quote missing required rank information")
-                continue
-            
-            s3_key = f"{safe_podcast_title}/{safe_episode_title}/{quote_rank}.mp4"
-            encoded_key = urllib.parse.quote(s3_key, safe='/')
-            quote_video_url = f"{BASE_S3_VIDEO_URL}/{encoded_key}"
-            
-            # Update quote object/dict
-            if isinstance(quote, dict):
-                quote['quote_video_url'] = quote_video_url
-            else:
-                quote.quote_video_url = quote_video_url
-
-            # Update in DynamoDB
-            table.update_item(
-                Key={
-                    'podcast_title': podcast_title,
-                    'episode_title#quote_rank': sk
-                },
-                UpdateExpression='SET quote_video_url = :url, last_updated = :timestamp',
-                ExpressionAttributeValues={
-                    ':url': quote_video_url,
-                    ':timestamp': int(__import__('time').time())
-                }
-            )
-            logging.info(f"Updated quote_video_url for {sk}")
-        except Exception as e:
-            logging.error(f"Failed to update quote URL: {e}")
-
-    return quotes

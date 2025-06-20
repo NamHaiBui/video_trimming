@@ -48,7 +48,7 @@ def generate_video_artifacts(meta_data_idx, force_video_chunking=False, force_vi
         podcast_title = str(items[0].get('podcast_title', ''))
         episode_title = str(items[0].get('episode_title', ''))
         num_chunks = int(dynamodb_attribute_to_python_type(items[0].get('num_chunks', 0)))
-        s3_video_key = str(items[0].get('file_name', ''))
+        s3_video_key = str(items[0].get('video_url', ''))
         num_quotes = int(dynamodb_attribute_to_python_type(items[0].get('num_quotes', 0)))
 
         logging.info(f"Processing {podcast_title}/{episode_title} - {num_chunks} chunks, {num_quotes} quotes")
@@ -123,40 +123,40 @@ def generate_video_artifacts(meta_data_idx, force_video_chunking=False, force_vi
                     update_quote_video_status(podcast_title, episode_title, 'FAILED')
         
         # Process 3: Video Summaries (Sequential)
-        logging.info(f"Starting video summary processing...")
-        summarization_status = get_summarization_status(podcast_title, episode_title)
-        summaries_video_status = get_summaries_video_status(podcast_title, episode_title)
+        # logging.info(f"Starting video summary processing...")
+        # summarization_status = get_summarization_status(podcast_title, episode_title)
+        # summaries_video_status = get_summaries_video_status(podcast_title, episode_title)
         
-        if summarization_status == 'COMPLETED':
-            if summaries_video_status == 'COMPLETED' and not force_video_summary_extraction:
-                logging.info(f"Video summary extraction already completed, skipping...")
-            else:
-                update_video_summary_status(podcast_title, episode_title, 'IN_PROGRESS')
-                try:
-                    summary_data = get_summary_data(podcast_title, episode_title)
-                    if summary_data and summary_data.summary_chunk_timestamps:
-                        video_summary_paths = process_video_summary(
-                            podcast_title=podcast_title,
-                            episode_title=episode_title,
-                            s3_video_key=s3_video_key,
-                            summaries_info=summary_data
-                        )
+        # if summarization_status == 'COMPLETED':
+        #     if summaries_video_status == 'COMPLETED' and not force_video_summary_extraction:
+        #         logging.info(f"Video summary extraction already completed, skipping...")
+        #     else:
+        #         update_video_summary_status(podcast_title, episode_title, 'IN_PROGRESS')
+        #         try:
+        #             summary_data = get_summary_data(podcast_title, episode_title)
+        #             if summary_data and summary_data.summary_chunk_timestamps:
+        #                 video_summary_paths = process_video_summary(
+        #                     podcast_title=podcast_title,
+        #                     episode_title=episode_title,
+        #                     s3_video_key=s3_video_key,
+        #                     summaries_info=summary_data
+        #                 )
                         
-                        if len(video_summary_paths) == 1:
-                            update_video_summary_status(podcast_title, episode_title, 'COMPLETED')
-                            logging.info(f"Video summary processing completed")
-                        else:
-                            update_video_summary_status(podcast_title, episode_title, 'FAILED')
-                            logging.error(f"Summary count mismatch: {len(video_summary_paths)} != 1")
-                    else:
-                        update_video_summary_status(podcast_title, episode_title, 'FAILED')
-                        logging.error(f"No summary data found")
+        #                 if len(video_summary_paths) == 1:
+        #                     update_video_summary_status(podcast_title, episode_title, 'COMPLETED')
+        #                     logging.info(f"Video summary processing completed")
+        #                 else:
+        #                     update_video_summary_status(podcast_title, episode_title, 'FAILED')
+        #                     logging.error(f"Summary count mismatch: {len(video_summary_paths)} != 1")
+        #             else:
+        #                 update_video_summary_status(podcast_title, episode_title, 'FAILED')
+        #                 logging.error(f"No summary data found")
                         
-                except Exception as e:
-                    logging.error(f"Video summary processing failed: {e}")
-                    update_video_summary_status(podcast_title, episode_title, 'FAILED')
-        else:
-            logging.info(f"Summarization not completed, skipping video summary processing")
+        #         except Exception as e:
+        #             logging.error(f"Video summary processing failed: {e}")
+        #             update_video_summary_status(podcast_title, episode_title, 'FAILED')
+        # else:
+        #     logging.info(f"Summarization not completed, skipping video summary processing")
         
         episode_metadata = {
             'podcast_title': podcast_title,

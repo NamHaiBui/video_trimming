@@ -160,7 +160,7 @@ def process_video_summary(podcast_title: str,
                     merged_path, 
                     VIDEO_SUMMARY_BUCKET, 
                     s3_summary_key, 
-                    ExtraArgs={"ContentType": "video/mp4", "ACL": "public-read", "CacheControl": "max-age=3600"}
+                    ExtraArgs={"ContentType": "video/mp4", "ACL": "public-read"}
                 )
                 logging.info(f"Uploaded merged video to s3://{VIDEO_SUMMARY_BUCKET}/{s3_summary_key}")
                 
@@ -189,10 +189,9 @@ def update_video_summary_status(podcast_title, episode_title, status):
                 'podcast_title': podcast_title,
                 'episode_title': episode_title
             },
-            UpdateExpression='SET summaries_video_status = :status, last_updated = :timestamp',
+            UpdateExpression='SET summaries_video_status = :status',
             ExpressionAttributeValues={
                 ':status': status,
-                ':timestamp': int(__import__('time').time())
             },
             ReturnValues='UPDATED_NEW'
         )

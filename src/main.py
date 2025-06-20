@@ -4,32 +4,25 @@ import os
 import sys
 import time
 
-
 from tools.components.video.video_summary_cutting_script import process_video_summary
 from tools.generate_video_artifacts import generate_video_artifacts
 from utils.config import QUEUE_URL
 from utils.logging_config import setup_custom_logger
+from utils.aws_clients import get_s3_client, get_sqs_client, configure_ssl_environment
 
 # Set up logging
 logging = setup_custom_logger(__name__)
 
-# LocalStack configuration for testing
-USE_LOCALSTACK = os.getenv('USE_LOCALSTACK', 'false').lower() == 'true'
-
-if USE_LOCALSTACK:
-    # Initialize SQS client for LocalStack
-    sqs = boto3.client(
-        'sqs',
-        endpoint_url='http://localhost:4566',
-        region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'),
-        aws_access_key_id='test',
-        aws_secret_access_key='test'
-    )
-    logging.info("Using LocalStack SQS endpoint")
+# Configure SSL environment before creating AWS clients
+logging.info("Configuring SSL environment...")
+if configure_ssl_environment():
+    logging.info("SSL environment configured successfully")
 else:
-    # Initialize SQS client for AWS
-    sqs = boto3.client('sqs', region_name=os.getenv('AWS_DEFAULT_REGION', 'us-east-1'))
-    logging.info("Using AWS SQS endpoint")
+    logging.warning("SSL environment configuration had issues")
+
+# Initialize SQS client for AWS
+sqs = get_sqs_client()
+logging.info("Using AWS SQS endpoint")
     
 def process_sqs_message(message_body):
     """
@@ -84,18 +77,6 @@ def process_sqs_message(message_body):
         logging.exception("Full traceback:")
         return False
 
-def create_queue_if_not_exists():
-    """Create SQS queue if it doesn't exist (useful for LocalStack testing)"""
-    if USE_LOCALSTACK and QUEUE_URL:
-        try:
-            queue_name = QUEUE_URL.split('/')[-1]
-            response = sqs.create_queue(QueueName=queue_name)
-            logging.info(f"Created or confirmed queue: {queue_name}")
-            return response['QueueUrl']
-        except Exception as e:
-            logging.warning(f"Could not create queue: {e}")
-    return QUEUE_URL
-
 def poll_and_process_sqs_messages():
     """
     Main loop to poll SQS messages and process them.
@@ -104,10 +85,7 @@ def poll_and_process_sqs_messages():
         logging.error("SQS_QUEUE_URL environment variable not set")
         return
     
-    # Create queue if using LocalStack
-    queue_url = create_queue_if_not_exists()
-    
-    logging.info(f"Starting SQS message processing with queue: {queue_url}")
+    logging.info(f"Starting SQS message processing with queue: {QUEUE_URL}")
     
     while True:
         try:
@@ -232,12 +210,12 @@ def main():
             'statusCode': 500,
             'body': f"Error: No quotes found for the episode."
         }
-    if not summary_result:
-        logging.error("No summary result found for the episode.")
-        return {
-            'statusCode': 500,
-            'body': f"Error: No summary result found for the episode."
-        }
+    # if not summary_result:
+    #     logging.error("No summary result found for the episode.")
+    #     return {
+    #         'statusCode': 500,
+    #         'body': f"Error: No summary result found for the episode."
+    #     }
     logging.info("Task complete.")
 
 if __name__ == "__main__":

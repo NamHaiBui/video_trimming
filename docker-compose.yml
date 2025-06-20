@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  video-trimming:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PODCAST_METADATA_TABLE=${PODCAST_METADATA_TABLE:-PodcastEpisodeStore}
+      - QUOTES_TABLE=${QUOTES_TABLE:-TranscriptQuoteStore}
+      - CHUNK_TABLE=${CHUNK_TABLE:-TranscriptChunkStore}
+      - VIDEO_BUCKET=${VIDEO_BUCKET:-pd-video-storage-test}
+      - SUMMARY_TRANSCRIPT_BUCKET=${SUMMARY_TRANSCRIPT_BUCKET:-pd-summary-transcript-storage}
+      - VIDEO_QUOTES_CHUNK_BUCKET=${VIDEO_QUOTES_CHUNK_BUCKET:-pd-video-quotes-storage}
+      - CHUNK_VIDEO_BUCKET=${CHUNK_VIDEO_BUCKET:-pd-video-chunks-storage}
+      - VIDEO_SUMMARY_BUCKET=${VIDEO_SUMMARY_BUCKET:-pd-video-summary-storage}
+      - SQS_QUEUE_URL=${SQS_QUEUE_URL}
+      - MAX_CONCURRENT_PROCESSING=${MAX_CONCURRENT_PROCESSING:-3}
+      - TEMP_DIR=/tmp/video_processing
+    volumes:
+      - ./logs:/app/logs
+      - ./output:/app/output
+    networks:
+      - video-processing
+
+networks:
+  video-processing:
+    driver: bridge

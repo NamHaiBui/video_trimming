@@ -2,12 +2,14 @@ import os
 import boto3
 import tempfile
 import json
-from pydub import AudioSegment
+# from pydub import AudioSegment
 from boto3.dynamodb.conditions import Key
-from pydub.utils import which
+# from pydub.utils import which
 from typing import List
-
-from utils.config import CHUNK_TABLE, PODCAST_METADATA_TABLE, QUOTES_TABLE, SUMMARY_TRANSCRIPT_BUCKET
+from utils.dynamo_att_to_types import (
+    flatten_timestamps, flatten_word_timestamps, flatten_list_field
+)
+from utils.config import CHUNK_TABLE, QUOTES_TABLE, SUMMARY_TRANSCRIPT_BUCKET
 from utils.logging_config import setup_custom_logger
 from models.summary_transcript_model import SummaryTranscriptModel
 from models.chunk_model import Chunk
@@ -113,9 +115,7 @@ def get_all_chunks(podcast_title: str, episode_title: str, num_chunks: int) -> L
             logging.debug(f"Processing chunk item: {item}")
             try:
                 # Import the DynamoDB converter
-                from utils.dynamo_att_to_types import (
-                    flatten_timestamps, flatten_word_timestamps, flatten_list_field
-                )
+
                 # Convert DynamoDB types to Python types with special handling for nested structures
                 converted_item = {}
                 for key, value in item.items():

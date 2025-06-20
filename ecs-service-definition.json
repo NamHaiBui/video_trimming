@@ -1,0 +1,45 @@
+{
+  "serviceName": "video-trimming-service",
+  "cluster": "video-processing-cluster",
+  "taskDefinition": "video-trimming-service",
+  "desiredCount": 1,
+  "launchType": "FARGATE",
+  "platformVersion": "LATEST",
+  "networkConfiguration": {
+    "awsvpcConfiguration": {
+      "subnets": [
+        "subnet-YOUR_SUBNET_ID_1",
+        "subnet-YOUR_SUBNET_ID_2"
+      ],
+      "securityGroups": [
+        "sg-YOUR_SECURITY_GROUP_ID"
+      ],
+      "assignPublicIp": "DISABLED"
+    }
+  },
+  "loadBalancers": [],
+  "serviceRegistries": [],
+  "placementConstraints": [],
+  "placementStrategy": [],
+  "deploymentConfiguration": {
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 50,
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    }
+  },
+  "serviceTags": [
+    {
+      "key": "Environment",
+      "value": "Production"
+    },
+    {
+      "key": "Service",
+      "value": "VideoTrimming"
+    }
+  ],
+  "enableECSManagedTags": true,
+  "propagateTags": "SERVICE",
+  "enableExecuteCommand": false
+}

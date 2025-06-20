@@ -1,0 +1,157 @@
+{
+  "family": "video-trimming-service",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/video-trimming-task-role",
+  "containerDefinitions": [
+    {
+      "name": "video-trimming-container",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/video-trimming:latest",
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/video-trimming",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "environment": [
+        {
+          "name": "AWS_DEFAULT_REGION",
+          "value": "us-east-1"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        },
+        {
+          "name": "PYTHONUNBUFFERED",
+          "value": "1"
+        },
+        {
+          "name": "MAX_CONCURRENT_PROCESSING",
+          "value": "3"
+        },
+        {
+          "name": "MAX_CONCURRENT_CHUNKS",
+          "value": "1"
+        },
+        {
+          "name": "MAX_CONCURRENT_QUOTES",
+          "value": "1"
+        },
+        {
+          "name": "MAX_CONCURRENT_SUMMARIES",
+          "value": "1"
+        },
+        {
+          "name": "TEMP_DIR",
+          "value": "/tmp/video_processing"
+        },
+        {
+          "name": "FFMPEG_PATH",
+          "value": "/usr/bin/ffmpeg"
+        },
+        {
+          "name": "FFPROBE_PATH",
+          "value": "/usr/bin/ffprobe"
+        },
+        {
+          "name": "CHUNK_PROCESSING_TIMEOUT",
+          "value": "1800"
+        },
+        {
+          "name": "QUOTE_PROCESSING_TIMEOUT",
+          "value": "3600"
+        },
+        {
+          "name": "SUMMARY_PROCESSING_TIMEOUT",
+          "value": "2400"
+        },
+        {
+          "name": "SSL_CERT_FILE",
+          "value": "/opt/venv/lib/python3.12/site-packages/certifi/cacert.pem"
+        },
+        {
+          "name": "SSL_CERT_DIR",
+          "value": "/opt/venv/lib/python3.12/site-packages/certifi"
+        },
+        {
+          "name": "REQUESTS_CA_BUNDLE",
+          "value": "/opt/venv/lib/python3.12/site-packages/certifi/cacert.pem"
+        },
+        {
+          "name": "CURL_CA_BUNDLE",
+          "value": "/opt/venv/lib/python3.12/site-packages/certifi/cacert.pem"
+        },
+        {
+          "name": "PYTHONHTTPSVERIFY",
+          "value": "1"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "SQS_QUEUE_URL",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/sqs-queue-url"
+        },
+        {
+          "name": "PODCAST_METADATA_TABLE",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/podcast-metadata-table"
+        },
+        {
+          "name": "QUOTES_TABLE",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/quotes-table"
+        },
+        {
+          "name": "CHUNK_TABLE",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/chunk-table"
+        },
+        {
+          "name": "VIDEO_BUCKET",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/video-bucket"
+        },
+        {
+          "name": "SUMMARY_TRANSCRIPT_BUCKET",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/summary-transcript-bucket"
+        },
+        {
+          "name": "VIDEO_QUOTES_CHUNK_BUCKET",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/video-quotes-chunk-bucket"
+        },
+        {
+          "name": "CHUNK_VIDEO_BUCKET",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/chunk-video-bucket"
+        },
+        {
+          "name": "VIDEO_SUMMARY_BUCKET",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR_ACCOUNT_ID:parameter/video-trimming/video-summary-bucket"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "tmp-storage",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "python -c \"import boto3, ssl, certifi; from src.utils.aws_clients import configure_ssl_environment; configure_ssl_environment(); sqs = boto3.client('sqs', region_name='us-east-1'); sqs.list_queues(); print('Health check passed')\" || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "tmp-storage",
+      "host": {}
+    }
+  ]
+}

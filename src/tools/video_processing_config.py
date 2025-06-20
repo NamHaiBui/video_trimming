@@ -16,13 +16,13 @@ class VideoProcessingConfig:
     MAX_CONCURRENT_SUMMARIES = int(os.getenv('MAX_CONCURRENT_SUMMARIES', '1'))
     
     # Timeout settings (in seconds)
-    CHUNK_PROCESSING_TIMEOUT = int(os.getenv('CHUNK_PROCESSING_TIMEOUT', '1800'))  # 30 minutes
-    QUOTE_PROCESSING_TIMEOUT = int(os.getenv('QUOTE_PROCESSING_TIMEOUT', '3600'))  # 60 minutes  
+    CHUNK_PROCESSING_TIMEOUT = int(os.getenv('CHUNK_PROCESSING_TIMEOUT', '5')) # 5s
+    QUOTE_PROCESSING_TIMEOUT = int(os.getenv('QUOTE_PROCESSING_TIMEOUT', '5'))   
     SUMMARY_PROCESSING_TIMEOUT = int(os.getenv('SUMMARY_PROCESSING_TIMEOUT', '2400'))  # 40 minutes
     
     # Retry settings
     MAX_RETRIES = int(os.getenv('MAX_PROCESSING_RETRIES', '3'))
-    RETRY_DELAY = int(os.getenv('RETRY_DELAY_SECONDS', '300'))  # 5 minutes
+    RETRY_DELAY = int(os.getenv('RETRY_DELAY_SECONDS', '5'))  
     
     # Resource limits
     MAX_MEMORY_MB = int(os.getenv('MAX_MEMORY_MB', '4096'))  # 4GB
