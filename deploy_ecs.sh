@@ -8,7 +8,7 @@ REGION="us-east-1"
 ACCOUNT_ID="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}"
 REPOSITORY_NAME="video-trimming"
 SERVICE_NAME="video-trimming-service"
-CLUSTER_NAME="video-trimming-cluster"
+CLUSTER_NAME="video-processing-cluster"
 IMAGE_TAG="${1:-latest}"
 
 echo "🚀 Starting ECS deployment for Video Trimming Service"

@@ -123,6 +123,102 @@ The SSL configuration tools will:
 
 For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
+## Project Structure
+
+```
+video_trimming/
+├── src/
+│   ├── main.py                 # Main application entry point
+│   ├── models/                 # Data models
+│   │   ├── chunk_model.py
+│   │   ├── quote_model.py
+│   │   └── summary_transcript_model.py
+│   ├── tools/                  # Video processing tools
+│   │   ├── components/         # Video processing components
+│   │   ├── generate_video_artifacts.py
+│   │   ├── monitor_video_processes.py
+│   │   └── video_processing_config.py
+│   └── utils/                  # Utility modules
+│       ├── aws_clients.py      # AWS client configuration
+│       ├── config.py           # Application configuration
+│       ├── db_operations.py    # Database operations
+│       ├── logging_config.py   # Logging configuration
+│       └── ...
+├── scripts/                    # Setup and utility scripts
+│   ├── check_dependencies.py   # Check system dependencies
+│   ├── create_s3_buckets.py   # Create required S3 buckets
+│   ├── fix_ssl_issues.py      # Diagnose and fix SSL issues
+│   ├── install_ffmpeg.py      # Install FFmpeg
+│   ├── setup_ffmpeg.sh        # FFmpeg setup script
+│   ├── setup_s3_buckets.sh    # S3 bucket setup wrapper
+│   ├── test_ffmpeg.py         # Test FFmpeg installation
+│   └── validate-build.sh      # Validate build configuration
+├── logs/                       # Application logs
+├── output/                     # Video processing output
+├── sample/                     # Sample data for testing
+├── ecs-task-definition.json    # ECS task definition
+├── ecs-service-definition.json # ECS service definition
+├── docker-compose.yml          # Docker Compose configuration
+├── Dockerfile                  # Docker image definition
+├── deploy_ecs.sh              # ECS deployment script
+├── setup_ssl_env.sh           # SSL environment setup
+├── start_service.sh           # Service startup script
+├── test_ssl_fix.py            # SSL configuration testing
+├── validate_ecs_ssl.py        # ECS SSL validation
+├── .env.example               # Environment variables template
+├── requirements.txt           # Python dependencies
+├── requirements-dev.txt       # Development dependencies
+├── Makefile                   # Build and deployment commands
+└── README.md                  # This file
+```
+
+## Available Scripts
+
+The project includes several utility scripts to help with setup and maintenance:
+
+### Setup Scripts
+- `scripts/check_dependencies.py` - Check system dependencies and requirements
+- `scripts/install_ffmpeg.py` - Install FFmpeg on various systems
+- `scripts/setup_ffmpeg.sh` - FFmpeg setup bash script
+- `scripts/create_s3_buckets.py` - Create required S3 buckets
+- `scripts/setup_s3_buckets.sh` - S3 bucket setup wrapper script
+
+### SSL Configuration Scripts
+- `setup_ssl_env.sh` - Configure SSL environment variables
+- `test_ssl_fix.py` - Test SSL configuration
+- `scripts/fix_ssl_issues.py` - Diagnose and fix SSL issues
+- `validate_ecs_ssl.py` - Validate SSL configuration for ECS deployment
+
+### Deployment Scripts
+- `deploy_ecs.sh` - Deploy to AWS ECS
+- `start_service.sh` - Start the service locally with SSL configuration
+- `scripts/validate-build.sh` - Validate build configuration
+
+### Testing Scripts
+- `scripts/test_ffmpeg.py` - Test FFmpeg installation and functionality
+
+### Usage Examples
+
+```bash
+# Check system dependencies
+python scripts/check_dependencies.py
+
+# Setup S3 buckets
+python scripts/create_s3_buckets.py
+
+# Install FFmpeg
+python scripts/install_ffmpeg.py
+
+# Test SSL configuration
+python test_ssl_fix.py
+
+# Start service locally
+./start_service.sh
+
+# Deploy to ECS
+./deploy_ecs.sh
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -174,15 +270,18 @@ make test
 make shell
 
 # Run locally with Docker Compose
-make local-run
+docker-compose up
 
 # Stop local environment
-make local-stop
+docker-compose down
 ```
 
 ### Production Commands
 
 ```bash
+# Build and push to ECR
+make push
+
 # Deploy to production
 make deploy
 
@@ -194,6 +293,22 @@ make status
 
 # Get deployment info
 make info
+
+# Validate task definition
+make validate
+```
+
+### SSL Troubleshooting Commands
+
+```bash
+# Diagnose and fix SSL issues
+make fix-ssl
+
+# Check SSL configuration only
+make check-ssl
+
+# Update SSL dependencies
+make update-deps
 ```
 
 ## Message Format
@@ -268,7 +383,7 @@ Enable debug logging by setting `LOG_LEVEL=DEBUG` in your environment.
 
 ## Development
 
-### Project Structure
+### Key Files and Directories
 
 ```
 .

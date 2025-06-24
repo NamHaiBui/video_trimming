@@ -154,10 +154,7 @@ def process_video_chunks(podcast_title: str,
                     logging.error(f"Error processing chunk {i+1}: {e}")
                     continue
             
-            # Update chunk URLs in database
-            if successful_uploads:
-                update_chunk_video_urls_in_dynamo(podcast_title, episode_title, chunks_info)
-            
+
             logging.info(f"Successfully processed {len(successful_uploads)}/{len(chunks_info)} chunks")
             return successful_uploads
         

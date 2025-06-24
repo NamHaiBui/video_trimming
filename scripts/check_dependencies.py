@@ -62,7 +62,7 @@ class DependencyChecker:
         self.optional_env_vars = {
             'AWS_DEFAULT_REGION': 'us-east-1',
             'LOG_LEVEL': 'INFO',
-            'MAX_CONCURRENT_PROCESSING': '5',
+            'MAX_CONCURRENT_PROCESSING': '3',
             'TEMP_DIR': '/tmp/video_processing',
         }
     

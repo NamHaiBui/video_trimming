@@ -76,7 +76,7 @@ def get_ffprobe_path():
 
 # Application Settings
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
-MAX_CONCURRENT_PROCESSING = int(os.environ.get("MAX_CONCURRENT_PROCESSING", "5"))
+MAX_CONCURRENT_PROCESSING = int(os.environ.get("MAX_CONCURRENT_PROCESSING", "3"))
 TEMP_DIR = os.environ.get("TEMP_DIR", "/tmp/video_processing")
 
 # Ensure temp directory exists

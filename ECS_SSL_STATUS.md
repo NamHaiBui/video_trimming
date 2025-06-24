@@ -51,7 +51,7 @@ python validate_ecs_ssl.py
 ### 3. Monitor Deployment
 ```bash
 # Check deployment status
-aws ecs describe-services --cluster video-trimming-cluster --services video-trimming-service
+aws ecs describe-services --cluster video-processing-cluster --services video-trimming-service
 
 # Monitor logs
 aws logs tail /ecs/video-trimming --follow
